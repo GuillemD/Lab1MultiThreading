@@ -10,12 +10,38 @@ void ModuleTaskManager::threadMain()
 		// - Retrieve a task from scheduledTasks
 		// - Execute it
 		// - Insert it into finishedTasks
+		Task *t = nullptr;
+		std::unique_lock<std::mutex> lock(mtx);
+		while (t == nullptr)
+		{
+			if (scheduledTasks.empty())
+			{
+				event.wait(lock);
+			}
+			else
+			{
+				t = scheduledTasks.front();
+				scheduledTasks.pop();
+			}
+		}
+
+		t->execute();
+
+		{
+			std::unique_lock<std::mutex> lock(mtx);
+			finishedTasks.push(t);
+		}
+		
 	}
 }
 
 bool ModuleTaskManager::init()
 {
 	// TODO 1: Create threads (they have to execute threadMain())
+	for (int i = 0; i < MAX_THREADS; ++i)
+	{
+		threads[i] = std::thread(&ModuleTaskManager::threadMain,this);
+	}
 
 	return true;
 }
@@ -39,6 +65,12 @@ void ModuleTaskManager::scheduleTask(Task *task, Module *owner)
 	task->owner = owner;
 
 	// TODO 2: Insert the task into scheduledTasks so it is executed by some thread
+	{
+		std::unique_lock<std::mutex> lock(mtx);
+		scheduledTasks.push(task);
+		event.notify_one();
+	}
+	
 }
 
 
@@ -69,13 +101,29 @@ void ModuleTaskManager::scheduleTask(Task *task, Module *owner)
 //
 //	system("pause");
 //	return 0;
-//}////void taskManagerMain(int arg1, int arg2, int arg3)//{
+//}
+//
+//void taskManagerMain(int arg1, int arg2, int arg3)
+//{
 //	while (true)
 //	{
 //		Task *t = nullptr;
 //
 //
 //		std::unique_lock<std::mutex> lock(mtx);
-//		while (t == nullptr)//		{////			if (scheduledTasks.empty())//			{//				cond.wait(lock);//			}//			else//			{//				t = scheduledTasks.front();//				scheduledTasks.pop();//			}//		}
+//		while (t == nullptr)
+//		{
+//
+//			if (scheduledTasks.empty())
+//			{
+//				cond.wait(lock);
+//			}
+//			else
+//			{
+//				t = scheduledTasks.front();
+//				scheduledTasks.pop();
+//			}
+//		}
 //	}
-////}
+//
+//}
