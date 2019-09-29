@@ -3,7 +3,7 @@
 
 void ModuleTaskManager::threadMain()
 {
-	while (true)
+	while (!exitFlag)
 	{
 		// TODO 3:
 		// - Wait for new tasks to arrive
@@ -12,7 +12,7 @@ void ModuleTaskManager::threadMain()
 		// - Insert it into finishedTasks
 		Task *t = nullptr;
 		std::unique_lock<std::mutex> lock(mtx);
-		while (t == nullptr)
+		while (t == nullptr && !exitFlag)
 		{
 			if (scheduledTasks.empty())
 			{
@@ -22,15 +22,12 @@ void ModuleTaskManager::threadMain()
 			{
 				t = scheduledTasks.front();
 				scheduledTasks.pop();
+				t->execute();
+				finishedTasks.push(t);
 			}
 		}
 
-		t->execute();
-
-		{
-			std::unique_lock<std::mutex> lock(mtx);
-			finishedTasks.push(t);
-		}
+		
 		
 	}
 }
@@ -49,6 +46,12 @@ bool ModuleTaskManager::init()
 bool ModuleTaskManager::update()
 {
 	// TODO 4: Dispatch all finished tasks to their owner module (use Module::onTaskFinished() callback)
+	std::unique_lock<std::mutex> lock(mtx);
+	while (!finishedTasks.empty())
+	{
+		finishedTasks.front()->owner->onTaskFinished(finishedTasks.front());
+		finishedTasks.pop();
+	}
 
 	return true;
 }
@@ -56,6 +59,13 @@ bool ModuleTaskManager::update()
 bool ModuleTaskManager::cleanUp()
 {
 	// TODO 5: Notify all threads to finish and join them
+	exitFlag = true;
+	event.notify_all();
+
+	for (int i = 0; i < MAX_THREADS; ++i)
+	{
+		threads[i].join();
+	}
 
 	return true;
 }
